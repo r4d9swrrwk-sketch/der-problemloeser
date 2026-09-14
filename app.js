@@ -1,7 +1,7 @@
 /* Der Problemlöser — app.js: UI rendering, step display, result, history */
 "use strict";
-
-// Access engine exports without redeclaring globals (engine.js already declares const S etc.)
+(function() {
+// Access engine exports — wrapped in IIFE to avoid redeclaring globals from engine.js
 const PS = window.__PS;
 const S = PS.S;
 const STEPS = PS.STEPS;
@@ -386,3 +386,5 @@ function escapeAttr(s) { return escapeHtml(s); }
 
 // ─── INIT ─────────────────────────────────────────────────────
 initOllama();
+
+})(); // end IIFE

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Der Problemlöser · Der sokratische Weg zu deinen eigenen Lösungen</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="site-head">
+  <div class="brand">
+    <span class="brand-mark">◆</span>
+    <span class="brand-text">Der Problemlöser</span>
+  </div>
+  <nav class="head-nav">
+    <button class="link-btn" id="navHome" type="button">Start</button>
+    <button class="link-btn" id="navHistory" type="button">Meine Ergebnisse</button>
+  </nav>
+</header>
+
+<main class="stage" id="stage">
+
+  <!-- WILLKOMMEN -->
+  <section class="screen is-active" id="screenWelcome">
+    <div class="welcome-card">
+      <p class="eyebrow">Sokratische Methode · Interaktiv</p>
+      <h1>Willkommen bei<br><em>Der Problemlöser</em></h1>
+      <p class="lede">
+        Sokrates hat seinen Schülern nie Antworten gegeben — er stellte so
+        geschickte Fragen, bis sie die Lösung <strong>selbst</strong> sahen.
+        Genau das passiert hier: Sieben Schritte, kluge Fragen, und am Ende
+        steht deine Erkenntnis — nicht die einer KI.
+      </p>
+      <ul class="welcome-points">
+        <li>🔍 Dein Problem wird eingeordnet und psychologisch kontextualisiert</li>
+        <li>🧭 Die Lösung formulierst <strong>du selbst</strong> — durch gute Fragen</li>
+        <li>💾 Deine Journey bleibt lokal in diesem Browser gespeichert</li>
+      </ul>
+      <div class="ai-row">
+        <label class="switch">
+          <input type="checkbox" id="ollamaToggle" />
+          <span>KI-Assist via Ollama (optional, <code>localhost:11434</code>)</span>
+        </label>
+        <input type="text" id="modelInput" class="model-input" placeholder="Modell, z.B. llama3.2" aria-label="Ollama Modellname" />
+        <span class="ai-status" id="aiStatus">prüfen…</span>
+      </div>
+      <button class="btn btn--primary btn--lg" id="startBtn" type="button">Los geht's →</button>
+    </div>
+  </section>
+
+  <!-- FRAGEN-FLOW -->
+  <section class="screen" id="screenQuiz">
+    <div class="quiz-top">
+      <span class="step-label" id="stepLabel">Schritt 1 von 7</span>
+      <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+    <div class="step-card" id="stepCard"></div>
+    <div class="quiz-foot">
+      <button class="btn btn--ghost" id="backBtn" type="button">← Zurück</button>
+      <button class="btn btn--primary" id="nextBtn" type="button">Weiter →</button>
+    </div>
+  </section>
+
+  <!-- ANALYSE-LAUEND -->
+  <section class="screen" id="screenAnalyzing">
+    <div class="analyzing">
+      <div class="pulse-dot"></div>
+      <p id="analyzingText">Ich denke über deine Antworten nach …</p>
+      <p class="analyzing-sub" id="analyzingSub"></p>
+    </div>
+  </section>
+
+  <!-- ERGEBNIS -->
+  <section class="screen" id="screenResult"></section>
+
+  <!-- HISTORIE -->
+  <section class="screen" id="screenHistory">
+    <div class="history-head">
+      <h2>Meine Ergebnisse</h2>
+      <div class="history-tools">
+        <select id="filterType" aria-label="Nach Problemtyp filtern">
+          <option value="">Alle Typen</option>
+          <option value="career">Beruf</option>
+          <option value="relationship">Beziehung</option>
+          <option value="mental">Mentale Gesundheit</option>
+          <option value="financial">Finanzen</option>
+          <option value="identity">Identität</option>
+          <option value="other">Andere</option>
+        </select>
+        <button class="btn btn--ghost" id="exportBtn" type="button">⬇ Export (JSON)</button>
+      </div>
+    </div>
+    <div id="historyList"></div>
+  </section>
+
+</main>
+
+<footer class="site-foot">
+  <span>Der Problemlöser · Kein Ersatz für therapeutische oder medizinische Beratung. In Krisen: Telefonseelsorge 0800 111 0 111 (kostenlos, 24/7).</span>
+</footer>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

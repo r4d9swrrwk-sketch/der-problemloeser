@@ -481,8 +481,8 @@ function renderStep() {
       break;
     case "yesno":
       inputHtml = `<div class="yesno-row">
-        <button class="btn btn--ghost btn--min44 choice--yesno ${a[step.id]==="yes"?"is-selected":""}" data-val="yes" data-step="${step.id}" type="button">Ja</button>
-        <button class="btn btn--ghost btn--min44 choice--yesno ${a[step.id]==="no"?"is-selected":""}" data-val="no" data-step="${step.id}" type="button">Nein</button>
+        <button class="btn choice choice--yesno ${a[step.id]==="yes"?"is-selected":""}" data-val="yes" data-step="${step.id}" type="button">Ja</button>
+        <button class="btn choice choice--yesno ${a[step.id]==="no"?"is-selected":""}" data-val="no" data-step="${step.id}" type="button">Nein</button>
       </div>`;
       break;
     case "choice-or-text":

@@ -25,8 +25,9 @@ global.AbortSignal = { timeout: () => undefined };
 
 const sandbox = { console, window: global.window, localStorage: global.localStorage, AbortSignal: global.AbortSignal, fetch: global.window.fetch, crypto: global.window.crypto, Blob: global.window.Blob, URL: global.window.URL, document: global.window.document, setTimeout, clearTimeout, setInterval, clearInterval };
 vm.createContext(sandbox);
-const src = fs.readFileSync(__dirname + "/engine.js", "utf8");
-vm.runInContext(src + "\n; window.__PS = { S, STEPS, visibleSteps, currentStep, nextStep, prevStep, analyze, checkOllama, detectType, isCrisis, loadStore, saveStore, STORE_KEY };", sandbox);
+const src = fs.readFileSync(__dirname + "/main.js", "utf8");
+vm.runInContext(src, sandbox);
+try { vm.runInContext("; window.__PS = { S, STEPS, visibleSteps, currentStep, nextStep, prevStep, analyze, loadBrowserAI, aiEnrichAnalysis, detectType, isCrisis, loadStore, saveStore, STORE_KEY };", sandbox); } catch(e) {}
 
 const { S, STEPS, visibleSteps, analyze, detectType, isCrisis } = sandbox.window.__PS;
 

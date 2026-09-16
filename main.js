@@ -1,4 +1,4 @@
-/* Der Problemlöser — app.js part 1: data, steps, state, branching, Ollama, rule-based analyzer */
+/* Der Problemlöser — main.js: data, steps, state, branching, optional browser AI (transformers.js), rule-based analyzer */
 "use strict";
 
 // ─── STATE ───────────────────────────────────────────────────
@@ -6,9 +6,9 @@ const S = {
   step: 0,
   answers: {},          // keyed by step id
   path: [],             // sequence of step ids actually visited
-  ollama: false,
-  model: "llama3.2",
-  ollamaUrl: "http://localhost:11434/api/chat",
+  ai: false,            // optional neural analysis (transformers.js, runs in browser)
+  aiReady: false,
+  aiClassifier: null,
 };
 
 // ─── STORAGE ─────────────────────────────────────────────────
@@ -203,34 +203,66 @@ function prevStep() {
   }
 }
 
-// ─── OLLAMA INTEGRATION ───────────────────────────────────────
-async function checkOllama() {
+// ─── BROWSER-KI via transformers.js (optional, neuronale Analyse) ─
+const AI_MODEL = "onnx-community/multilingual-MiniLMv2-L6-mnli-xnli-ONNX";
+const AI_HYPOTHESIS = "Der Kern dieses Problems ist: {}.";
+const AI_CONCEPTS = {
+  "Angst vor Veränderung und Konsequenzen": "Fear-Based Avoidance",
+  "Hinaufschieben, trotz besserem Wissen, was zu tun wäre": "Procrastination",
+  "Gefühl, ohnehin nichts ändern zu können, Resignation": "Learned Helplessness",
+  "Sich nur die schlimmsten Szenarien ausmalen": "Catastrophizing",
+  "Nur vom Nutzen des Problems heimlich profitieren": "Secondary Gain",
+  "Grübeln in Endlosschleife ohne jeglichen Handlungsschritt": "Rumination",
+  "Perfektionismus: Angst, dass das Ergebnis nicht exzellent wird": "Perfectionism Paralysis",
+  "Unsicherheit: zu wenig Information für eine belastbare Entscheidung": "Uncertainty Paralysis",
+};
+const AI_EMOTIONS = ["starke Verzweiflung, Panik oder Wut", "mittlere Belastung mit Traurigkeit oder Frustration", "eine nüchterne gelassene Haltung"];
+const TYPE_LABEL_TO_KEY = { "Arbeit, Beruf, Chef oder Karriere": "career", "Partnerschaft, Familie oder enge Beziehungen": "relationship", "Depression, Angst, Burnout oder die psychische Verfassung": "mental", "Geld, Schulden oder finanzielle Sorgen": "financial", "Fragen zu sich selbst, zur Identität oder zum Lebenssinn": "identity" };
+let aiLoadPromise = null;
+
+function loadBrowserAI() {
+  if (!aiLoadPromise) aiLoadPromise = (async () => {
+    const transformers = await import("https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2");
+    transformers.env.allowLocalModels = false;
+    const clf = await transformers.pipeline("zero-shot-classification", AI_MODEL, {
+      quantized: true,
+      progress_callback: (p) => {
+        if (typeof S.onProgress === "function" && p.status === "progress") S.onProgress(p.progress || 0);
+      },
+    });
+    S.aiClassifier = clf;
+    S.aiReady = true;
+    return clf;
+  })();
+  return aiLoadPromise;
+}
+
+async function aiEnrichAnalysis(rb) {
+  const clf = S.aiClassifier;
+  const a = S.answers;
+  const problem = a.problem || "";
+  const out = { ...rb, _source: "ai" };
   try {
-    const r = await fetch("http://localhost:11434/api/tags", { signal: AbortSignal.timeout(3000) });
-    if (!r.ok) return false;
-    const d = await r.json();
-    return (d.models || []).length > 0;
-  } catch { return false; }
+    const context = [problem, a.whyNot || a.whyExternal || "", a.readinessLow || "", a.counterfactual || ""].filter(Boolean).join(" ");
+    const labels = Object.keys(AI_CONCEPTS);
+    const co = await clf(context, labels, { hypothesis_template: AI_HYPOTHESIS, multi_label: true });
+    const hits = co.labels.map((l, i) => ({ c: AI_CONCEPTS[l], s: co.scores[i] })).filter(x => x.s >= 0.35).slice(0, 4);
+    if (hits.length) out.psychologicalConcepts = [...new Set([...hits.map(h => h.c), ...(rb.psychologicalConcepts || [])])].slice(0, 5);
+    const eo = await clf(problem, AI_EMOTIONS, { hypothesis_template: "Die Person beschreibt {}." });
+    out.emotionalIntensity = ["high", "medium", "low"][AI_EMOTIONS.indexOf(eo.labels[0])] || rb.emotionalIntensity;
+    try {
+      const to = await clf(problem, Object.keys(TYPE_LABEL_TO_KEY), { hypothesis_template: "Das zentrale Thema ist: {}." });
+      if (to.scores[0] >= 0.45) out.problemType = TYPE_LABEL_TO_KEY[to.labels[0]] || rb.problemType;
+    } catch { /* type keeps rule-based result */ }
+    out._aiConfidence = co.scores[0];
+  } catch (e) {
+    console.warn("AI enrichment failed, using rule-based:", e);
+    out._source = "ai-fallback";
+  }
+  return out;
 }
 
-async function ollamaAnalyze(promptText) {
-  const r = await fetch(S.ollamaUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(60000),
-    body: JSON.stringify({
-      model: S.model,
-      stream: false,
-      format: "json",
-      messages: [{ role: "user", content: promptText }],
-    }),
-  });
-  if (!r.ok) throw new Error("Ollama HTTP " + r.status);
-  const d = await r.json();
-  return JSON.parse(d.message?.content || "{}");
-}
-
-// ─── RULE-BASED ANALYZER (fallback when no Ollama) ───────────
+// ─── RULE-BASED ANALYZER (Fallback, wenn KI aus oder nicht verfügbar) ─
 function ruleBasedAnalyze() {
   const a = S.answers;
   const problem = a.problem || "";
@@ -337,70 +369,18 @@ function ruleBasedAnalyze() {
   };
 }
 
-// ─── BUILD OLLAMA PROMPT ──────────────────────────────────────
-function buildOllamaPrompt() {
-  const a = S.answers;
-  return `Du bist ein erfahrener Psychologe, Therapeut und Soziologe.
-Du analysierst ein Problem basierend auf den Antworten des Users.
-
-ANTWORTEN DES USERS:
-- Problem: ${a.problem || ""}
-- Kann selbst lösen: ${a.canSolve || "??"}
-- Warum nicht (ja): ${a.whyNot || "—"}
-- Warum extern (nein): ${a.whyExternal || "—"}
-- Anteil selbst kontrollierbar: ${a.externalReframe || "—"}
-- Bereitschaft (1-10): ${a.readiness ?? "—"}
-- Warum kümmert's dich: ${a.readinessLow || "—"}
-- Betroffen: ${(a.affected || []).join(", ") || "—"}
-- In 1 Woche relevant: ${a.time1w || "?"}
-- In 1 Monat relevant: ${a.time1m || "?"}
-- In 1 Jahr relevant: ${a.time1y || "?"}
-- Rückblick: ${a.counterfactual || "—"}
-- Kleinster Schritt morgen: ${a.smallestStep || "—"}
-
-ANALYSIERE in folgende Kategorien:
-1. Psychologische Konzepte (Procrastination, Fear-Based Avoidance, Catastrophizing, Learned Helplessness, Locus of Control, Status Quo Bias, Cognitive Dissonance, Rumination, Secondary Gain, Perfectionism, Attribution Error, Impostor Syndrome, Burnout, etc.)
-2. Signifikanz (HIGH/MEDIUM/LOW) basierend auf 1Woche/1Monat/1Jahr
-3. Erkannte Lösung (die der USER selbst formuliert hat)
-4. Psychologische Erklärung warum die Lösung funktioniert
-5. Nächste Schritte (3 konkrete SMART Schritte: morgen, diese Woche, dieser Monat)
-6. Fallstricke (3 Dinge auf die achten)
-7. Inspirierendes Zitat (echtes Zitat, nicht erfunden)
-
-ANTWORTE NUR als JSON:
-{
-  "problemType": "career|relationship|mental|financial|identity|other",
-  "emotionalIntensity": "high|medium|low",
-  "psychologicalConcepts": ["Konzept1"],
-  "significance": "HIGH|MEDIUM|LOW",
-  "significanceReason": "...",
-  "recognizedSolution": "...",
-  "psychologicalExplanation": "...",
-  "nextSteps": ["Schritt 1", "Schritt 2", "Schritt 3"],
-  "pitfalls": ["Fallstrick 1", "Fallstrick 2", "Fallstrick 3"],
-  "inspirationalQuote": "...",
-  "quoteAuthor": "..."
-}`;
-}
-
 // ─── ANALYZE (dispatch) ──────────────────────────────────────
 async function analyze() {
-  if (S.ollama) {
-    try {
-      const result = await ollamaAnalyze(buildOllamaPrompt());
-      // fill gaps with rule-based
-      const rb = ruleBasedAnalyze();
-      return { ...rb, ...result, _source: "ollama" };
-    } catch (e) {
-      console.warn("Ollama failed, falling back:", e);
-    }
+  const rb = ruleBasedAnalyze();
+  if (S.ai && S.aiReady) {
+    return await aiEnrichAnalysis(rb);
   }
-  return { ...ruleBasedAnalyze(), _source: "rules" };
+  return { ...rb, _source: "rules" };
 }
 
 // expose
 if (typeof window !== "undefined") {
-  window.__PS = { S, STEPS, visibleSteps, currentStep, nextStep, prevStep, analyze, checkOllama, detectType, isCrisis, loadStore, saveStore, STORE_KEY };
+  window.__PS = { S, STEPS, visibleSteps, currentStep, nextStep, prevStep, analyze, loadBrowserAI, aiEnrichAnalysis, detectType, isCrisis, loadStore, saveStore, STORE_KEY };
 }
 
 (function() {
@@ -413,7 +393,6 @@ const currentStep = PS.currentStep;
 const nextStep = PS.nextStep;
 const prevStep = PS.prevStep;
 const analyze = PS.analyze;
-const checkOllama = PS.checkOllama;
 const detectType = PS.detectType;
 const isCrisis = PS.isCrisis;
 const loadStore = PS.loadStore;
@@ -429,26 +408,32 @@ const screens = {
 };
 function show(name) { Object.entries(screens).forEach(([k, el]) => el.classList.toggle("is-active", k === name)); }
 
-// ─── WELCOME / OLLAMA CHECK ───────────────────────────────────
-async function initOllama() {
-  const ok = await checkOllama();
+// ─── WELCOME / KI-TOGGLE (Transformers.js, läuft im Browser) ─
+const loadBrowserAI = PS.loadBrowserAI;
+function onAIProgress(pct) {
   const st = $("aiStatus");
-  if (ok) {
-    S.ollama = true;
-    $("ollamaToggle").checked = true;
-    st.textContent = "✓ Ollama erkannt";
+  if (st && S.ai) st.textContent = `KI-Modell wird geladen … ${Math.round(pct)}%`;
+}
+S.onProgress = onAIProgress;
+
+$("aiToggle").addEventListener("change", async (e) => {
+  S.ai = e.target.checked;
+  const st = $("aiStatus");
+  if (!S.ai) { st.textContent = "regelbasierte Analyse"; st.className = "ai-status"; return; }
+  if (S.aiReady) { st.textContent = "✓ KI bereit"; st.className = "ai-status ok"; return; }
+  st.textContent = "KI-Modell wird geladen … (einmalig ~100 MB, danach lokal gespeichert)";
+  st.className = "ai-status";
+  try {
+    await loadBrowserAI();
+    st.textContent = "✓ KI bereit (läuft komplett in deinem Browser)";
     st.className = "ai-status ok";
-  } else {
-    st.textContent = "nicht erreichbar — regelbasierte Analyse wird verwendet";
+  } catch (err) {
+    S.ai = false;
+    e.target.checked = false;
+    st.textContent = "KI nicht verfügbar (kein Netz?) — regelbasierte Analyse wird verwendet";
     st.className = "ai-status bad";
   }
-}
-
-$("ollamaToggle").addEventListener("change", (e) => {
-  S.ollama = e.target.checked;
-  if (S.ollama) S.model = $("modelInput").value || "llama3.2";
 });
-$("modelInput").addEventListener("change", (e) => { S.model = e.target.value || "llama3.2"; });
 
 // ─── RENDER STEP ──────────────────────────────────────────────
 function renderStep() {
@@ -611,7 +596,7 @@ async function finish() {
   const msgs = ["Ich denke über deine Antworten nach …", "Ordne psychologische Konzepte zu …", "Bewerte zeitliche Signifikanz …", "Formuliere deine erkannte Lösung …"];
   let m = 0;
   $("analyzingText").textContent = msgs[0];
-  $("analyzingSub").textContent = S.ollama ? "(KI-Analyse via Ollama läuft …)" : "(regelbasierte Analyse läuft …)";
+  $("analyzingSub").textContent = S.ai && S.aiReady ? "(Neuronale KI-Analyse läuft …)" : "(regelbasierte Analyse läuft …)";
   const t = setInterval(() => { $("analyzingText").textContent = msgs[m++ % msgs.length]; }, 1800);
   try {
     const result = await analyze();
@@ -691,7 +676,7 @@ function renderResult(r) {
       <button class="btn btn--ghost" id="newBtn" type="button">🔄 Neues Problem</button>
       <button class="btn btn--ghost" id="histBtn" type="button">📋 Meine Ergebnisse</button>
     </div>
-    <p class="ai-note">Analyse: ${r._source === "ollama" ? "KI (Ollama)" : "regelbasiert"}</p>
+    <p class="ai-note">Analyse: ${r._source === "ai" ? "🧠 Neuronale KI (Transformers.js, lokal im Browser)" : r._source === "ai-fallback" ? "KI-Ausfall → regelbasiert" : "regelbasiert (KI aus)"}</p>
   </div>`;
 
   show("result");
@@ -788,6 +773,6 @@ function escapeHtml(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&l
 function escapeAttr(s) { return escapeHtml(s); }
 
 // ─── INIT ─────────────────────────────────────────────────────
-initOllama();
+$("aiStatus").textContent = "regelbasierte Analyse";
 
 })(); // end IIFE

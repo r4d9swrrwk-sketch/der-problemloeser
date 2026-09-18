@@ -1,6 +1,17 @@
 /* Der Problemlöser — main.js · PHASE 3: Fragen-Flow + Smart Branching Q2 (renderDynamicQuestion) */
 "use strict";
 
+// ─── BIBELVERSE (Tail der Analyse, nur wenn User es im Welcome wählt) ───
+const bibleVerses = {
+  career: "«Alles, was ihr tut, geschehe von Herzen, als für den Herrn und nicht für Menschen.» – Kolosser 3,23",
+  relationship: "«Die Liebe ist geduldig und freundlich, sie sucht nicht das Ihre.» – 1. Korinther 13,4-5",
+  mental: "«Fürchte dich nicht, denn ich bin mit dir; sei nicht ängstlich, denn ich bin dein Gott.» – Jesaja 41,10",
+  financial: "«Kein Mensch kann zwei Herren dienen.» – Matthäus 6,24 · «Der HERR ist mein Hirte, mir wird nichts mangeln.» – Psalm 23,1",
+  material: "«Was nützt es einem Menschen, wenn er die ganze Welt gewinnt und dabei sich selbst verliert?» – Lukas 9,25",
+  other: "«Weisheit beginnt mit der Ehrfurcht vor dem HERRN.» – Sprüche 1,7",
+};
+function bibleVerseFor(type) { return bibleVerses[type] || bibleVerses.other; }
+
 // ─── PROBLEM-TYP-ERKENNUNG (Keyword-Matching) ─────────────────
 function detectProblemType(text) {
   const lower = (text || "").toLowerCase();
@@ -79,6 +90,7 @@ function goToQuestion(n) {
     const body = document.getElementById("q2Body");
     if (body) renderDynamicQuestion(2, body);
   }
+  if (n === 3) updateCurveFeedback(); // Kurve beim Betreten von Q3 zeigen
   Object.entries(qEls).forEach(([key, el]) => {
     if (el) el.classList.toggle("hidden", Number(key) !== n);
   });
@@ -127,6 +139,25 @@ function selectQ2Answer(answer) {
   goToQuestion(3);
 }
 
+// Kurven-Reaktion: live-Kurvenanalyse unter den Timeline-Slidern
+const CURVE_FEEDBACK = {
+  steep_decline:  { cls: "border-secondary bg-emerald-50 text-secondary-deep", text: "🎉 Gute Nachricht — du erwartest, dass das vorbeigeht! Dann ist es vielleicht nicht so dramatisch, wie es sich heute anfühlt." },
+  gradual_decline: { cls: "border-primary bg-blue-50 text-primary-deep",       text: "🙂 Dein Problem wird langsam weniger intensiv — das ist ein guter Trend." },
+  flat:           { cls: "border-accent bg-amber-50 text-accent-deep",         text: "😐 Du erwartest, dass dein Problem gleich bleibt? Dann könnte es Zeit für eine neue Strategie sein." },
+  worsening:      { cls: "border-red-400 bg-red-50 text-red-700",              text: "⚠️ Du machst dir Sorgen, dass es schlimmer wird? Genau deshalb ist Handeln jetzt wichtig." },
+};
+function updateCurveFeedback() {
+  const box = document.getElementById("curveFeedback");
+  if (!box) return;
+  const tl = appState.userAnswers.timeline;
+  if (!tl) return;
+  const pattern = analyzeTimeline(tl.today, tl.month, tl.year);
+  const fb = CURVE_FEEDBACK[pattern];
+  box.className = "mt-5 rounded-xl border-l-4 px-4 py-3 text-sm font-medium transition-colors " + fb.cls;
+  box.textContent = fb.text;
+  box.classList.remove("hidden");
+}
+
 // Q3-Slider: live-Werte anzeigen + in state.timeline speichern
 const timelineSliders = [
   { id: "sliderToday",  out: "valToday",  key: "today" },
@@ -144,6 +175,7 @@ function syncTimelineSlider(cfg) {
       appState.userAnswers.timeline = { today: 5, month: 5, year: 5 };
     }
     appState.userAnswers.timeline[cfg.key] = v;
+    updateCurveFeedback(); // Kurven-Reaktion live aktualisieren
   };
   slider.addEventListener("input", apply);
   apply(); // Initialwerte in state spiegeln
@@ -251,6 +283,7 @@ function saveResultToLocalStorage(result) {
 function buildResultObject() {
   const ua = appState.userAnswers;
   const tl = ua.timeline || { today: 5, month: 5, year: 5 };
+  const toggle = document.getElementById("bibleToggle");
   return {
     id: generateUUID(),
     timestamp: new Date().toISOString(),
@@ -260,6 +293,7 @@ function buildResultObject() {
     timeline: { today: tl.today, month: tl.month, year: tl.year },
     trend: analyzeTimeline(tl.today, tl.month, tl.year),
     readiness: ua.readiness || 5,
+    bible: !!(toggle && toggle.checked),
   };
 }
 
@@ -293,6 +327,10 @@ function resultCardsHTML(r) {
         <p class="text-[11px] font-bold uppercase tracking-[.14em] text-primary-deep mb-1">Bereitschaft</p>
         <p class="text-[15px] font-semibold">${r.readiness} / 10</p>
       </div>
+      ${r.bible ? `<div class="rounded-xl border-l-4 border-secondary bg-emerald-50 px-5 py-4">
+        <p class="text-[11px] font-bold uppercase tracking-[.14em] text-secondary-deep mb-1">🕊️ Biblische Weisheit</p>
+        <p class="text-[15px] italic">${bibleVerseFor(r.problemType)}</p>
+      </div>` : ""}
     </div>`;
 }
 
@@ -383,7 +421,8 @@ if (typeof window !== "undefined" && window.__TEST) {
   window.__PS = { appState, showScreen, goToQuestion, nextQuestion, prevQuestion, updateProgress,
                   detectProblemType, q2Questions, renderDynamicQuestion, selectQ2Answer,
                   generateUUID, saveResultToLocalStorage, loadStoredResults, analyzeTimeline,
-                  renderResults, renderHistoryPage, viewResultDetail, deleteResult, STORAGE_KEY };
+                  renderResults, renderHistoryPage, viewResultDetail, deleteResult, STORAGE_KEY,
+                  CURVE_FEEDBACK, updateCurveFeedback, bibleVerses, bibleVerseFor };
 }
 
 // ─── INIT ──────────────────────────────────────────────────────

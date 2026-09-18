@@ -67,6 +67,14 @@
           <li class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-[15px]">📊 Eine Timeline-Skala zeigt, wie lange es dich wirklich beschäftigt</li>
           <li class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-[15px]">💾 Alles bleibt lokal in deinem Browser gespeichert</li>
         </ul>
+
+        <!-- Bibelverse-Toggle -->
+        <label id="bibleToggleRow" class="mt-5 flex items-center justify-between gap-4 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 cursor-pointer select-none">
+          <span class="text-[15px]">🕊️ Biblische Weisheit zu meinem Ergebnis hinzufügen</span>
+          <input id="bibleToggle" type="checkbox" class="sr-only peer" />
+          <span class="peer-focus-visible:ring-4 peer-focus-visible:ring-blue-300 shrink-0 w-12 h-7 rounded-full bg-gray-300 peer-checked:bg-secondary relative transition-colors after:content-[''] after:absolute after:top-1 after:left-1 after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-5"></span>
+        </label>
+
         <button id="startBtn" type="button"
                 class="mt-8 w-full sm:w-auto rounded-full px-8 py-4 text-base font-semibold text-white bg-gradient-to-br from-primary to-primary-deep shadow-lg shadow-blue-600/25 hover:shadow-blue-600/40 active:scale-[.98] transition">
           Los geht's →
@@ -131,6 +139,9 @@
               <input id="sliderYear" type="range" min="1" max="10" value="5" class="w-full accent-primary h-2.5 cursor-pointer" />
             </div>
           </div>
+
+          <!-- Kurven-Reaktion: live-Kurvenanalyse von analyzeTimeline() -->
+          <div id="curveFeedback" class="hidden mt-5 rounded-xl border-l-4 px-4 py-3 text-sm font-medium transition-colors"></div>
         </div>
 
         <!-- Q4 · READINESS -->

@@ -89,6 +89,7 @@ function goToQuestion(n) {
   if (n === 2) {
     const body = document.getElementById("q2Body");
     if (body) renderDynamicQuestion(2, body);
+    syncAiToggle(); // KI-Toggle lesen → bei AN läuft der Modell-Download im Hintergrund
   }
   if (n === 3) updateCurveFeedback(); // Kurve beim Betreten von Q3 zeigen
   Object.entries(qEls).forEach(([key, el]) => {
@@ -215,7 +216,8 @@ function nextQuestion() {
   } else if (n === TOTAL_QUESTIONS) {
     appState.userAnswers.readiness = parseInt(document.getElementById("sliderReadiness").value, 10);
     appState.autoSaved = false; // frisch berechnet → beim Rendern automatisch speichern
-    renderResults(); // Karten anzeigen + Auto-Save (Phase 4)
+    renderResults(); // Karten anzeigen + Auto-Save (Phase 4) — sofort, keyword-basiert
+    enhanceWithAI(); // danach optional: KI upgradert Typ/Emotion/Konzepte ohne zu blockieren
     return;
   }
   goToQuestion(n + 1);
@@ -349,9 +351,61 @@ function renderResults() {
   const r = buildResultObject();
   appState.lastResult = r;
   if (!appState.autoSaved) { saveResultToLocalStorage(r); appState.autoSaved = true; }
-  box.innerHTML = `<h2 class="text-2xl font-bold mb-4">🎯 Dein Ergebnis</h2>` + resultCardsHTML(r);
+  box.innerHTML = `<h2 class="text-2xl font-bold mb-4">🎯 Dein Ergebnis</h2>` + resultCardsHTML(r) + aiBadgeHTML();
   updateSaveBtn();
   showScreen("results");
+}
+
+// ─── KI-ANBINDUNG (additiv — App funktioniert ohne sie komplett weiter) ─────
+function aiToggleOn() {
+  const t = document.getElementById("aiToggle");
+  return !!(t && t.checked);
+}
+
+/** beim Betreten von Q2: Toggle-Zustand an ai.js melden → Hintergrund-Warmup */
+function syncAiToggle() {
+  if (typeof window.PS_AI === "undefined") return;
+  window.PS_AI.setEnabled(aiToggleOn());
+  if (aiToggleOn()) window.PS_AI.warmup();
+}
+
+function aiBadgeHTML(ai) {
+  ai = ai || appState.userAnswers.ai;
+  if (!ai) return "";
+  if (ai.source === "ai") {
+    const bits = [ai.emotion ? "Emotion: " + escapeHtml(ai.emotion) : "",
+                  ai.concepts && ai.concepts.length ? "Themen: " + ai.concepts.map(escapeHtml).join(", ") : ""];
+    return `<div class="mt-4 rounded-xl border-l-4 border-violet-400 bg-violet-50 px-5 py-4">
+      <p class="text-[11px] font-bold uppercase tracking-[.14em] text-violet-700 mb-1">🧠 KI-Analyse (Transformers.js)</p>
+      <p class="text-[15px]">Typ mit ${(ai.typeScore * 100).toFixed(0)}% Sicherheit bestätigt${bits.length ? " · " + bits.filter(Boolean).join(" · ") : ""}</p>
+    </div>`;
+  }
+  return `<p class="mt-3 text-xs text-soft">🧠 KI war nicht verfügbar — Ergebnis basiert auf Keyword-Erkennung.</p>`;
+}
+
+/** enhanced Karten + Ergebnis upgraden, ohne neu zu speichern (Eintrag wird überschrieben) */
+async function enhanceWithAI() {
+  if (typeof window.PS_AI === "undefined" || !aiToggleOn()) return;
+  window.PS_AI.setEnabled(true);
+  const problemText = appState.userAnswers[1] || "";
+  const fallback = appState.userAnswers.problemType || "other";
+  const ai = await window.PS_AI.analyze(problemText, fallback);
+  appState.userAnswers.ai = ai;
+  if (ai.source !== "ai") { const box = document.getElementById("resultsContainer"); if (box) box.innerHTML += aiBadgeHTML(); return; }
+  // Typ-Konflikt → KI gewinnt (sieht Kontext besser als Keywords)
+  appState.userAnswers.problemType = ai.type;
+  if (appState.lastResult) {
+    appState.lastResult.problemType = ai.type;
+    appState.lastResult.ai = ai;
+    // gespeicherten Eintrag mit gleicher ID überschreiben
+    const all = loadStoredResults();
+    const idx = all.findIndex(e => e.id === appState.lastResult.id);
+    if (idx !== -1) { all[idx] = appState.lastResult; localStorage.setItem(STORAGE_KEY, JSON.stringify(all)); }
+  }
+  const box = document.getElementById("resultsContainer");
+  if (box && appState.lastResult) {
+    box.innerHTML = `<h2 class="text-2xl font-bold mb-4">🎯 Dein Ergebnis</h2>` + resultCardsHTML(appState.lastResult) + aiBadgeHTML();
+  }
 }
 
 /** renderHistoryPage() — alle Ergebnisse, neueste zuerst */
@@ -394,7 +448,7 @@ function viewResultDetail(id) {
   box.innerHTML = `
     <p class="text-[11px] font-bold uppercase tracking-[.14em] text-soft mb-1">Gespeichertes Ergebnis</p>
     <h2 class="text-2xl font-bold mb-4">🎯 Analyse vom ${new Date(entry.timestamp).toLocaleDateString("de-DE")}</h2>
-    ${resultCardsHTML(entry)}
+    ${resultCardsHTML(entry)}${aiBadgeHTML(entry.ai)}
     <button id="backToHistoryBtn" type="button" class="mt-5 rounded-full bg-white border border-gray-300 text-soft px-5 py-2.5 text-sm font-semibold hover:border-primary hover:text-ink transition">← Zurück zur Liste</button>`;
   const back = document.getElementById("backToHistoryBtn");
   if (back && back.addEventListener) back.addEventListener("click", renderHistoryPage);
@@ -422,7 +476,8 @@ if (typeof window !== "undefined" && window.__TEST) {
                   detectProblemType, q2Questions, renderDynamicQuestion, selectQ2Answer,
                   generateUUID, saveResultToLocalStorage, loadStoredResults, analyzeTimeline,
                   renderResults, renderHistoryPage, viewResultDetail, deleteResult, STORAGE_KEY,
-                  CURVE_FEEDBACK, updateCurveFeedback, bibleVerses, bibleVerseFor };
+                  CURVE_FEEDBACK, updateCurveFeedback, bibleVerses, bibleVerseFor,
+                  syncAiToggle, aiBadgeHTML, enhanceWithAI, aiToggleOn };
 }
 
 // ─── INIT ──────────────────────────────────────────────────────
